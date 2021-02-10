@@ -1,0 +1,25 @@
+[package]
+name = "oxiboard"
+version = "0.1.0"
+authors = ["Alexander Korzun <korzun.sas@mail.ru>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies.gtk]
+version = "0.9"
+features = ["v3_16"]
+
+[dependencies.cairo-rs]
+version = "0.9"
+features = ["v1_14"]
+
+[dependencies.gio]
+version = "0.9"
+features = ["v2_44"]
+
+[dependencies.gdk]
+version = "0.13"
+
+[dependencies.thiserror]
+version = "1.0"
