@@ -1,5 +1,4 @@
 use cairo::Context as Cairo;
-use cairo::{Format, ImageSurface};
 use gdk::EventMask;
 use gio::prelude::*;
 use gtk::prelude::*;
@@ -20,7 +19,6 @@ pub struct Oxiboard {
     canvas: DrawingArea,
     lines: Vec<Line>,
     current_line: Option<Line>,
-    last_pos: Coords,
 }
 
 fn setup_gtk_app(app: &Application) {
@@ -54,7 +52,6 @@ fn setup_gtk_app(app: &Application) {
                 canvas,
                 lines: Vec::new(),
                 current_line: None,
-                last_pos: (0.0, 0.0),
             }
         )
     );
