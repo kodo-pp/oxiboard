@@ -1,82 +1,150 @@
-use gtk::prelude::*;
-use gio::prelude::*;
-use gtk::{Application, ApplicationWindow, DrawingArea};
-use gdk::EventMask;
 use cairo::Context as Cairo;
-use cairo::{ImageSurface, Format};
+use cairo::{Format, ImageSurface};
+use gdk::EventMask;
+use gio::prelude::*;
+use gtk::prelude::*;
+use gtk::{Application, ApplicationWindow, Builder, DrawingArea};
 use std::error::Error;
+use std::rc::Rc;
+use std::cell::RefCell;
 use thiserror::Error;
-
 
 #[derive(Debug, Error)]
 #[error("GTK Application returned an error code {0}")]
-pub struct GtkAppReturnCodeError(i32);
+pub struct GtkAppError(i32);
 
+type Coords = (f64, f64);
+type Line = (Coords, Coords);
 
 pub struct Oxiboard {
-    gtk_app: Application,
+    canvas: DrawingArea,
+    lines: Vec<Line>,
+    current_line: Option<Line>,
+    last_pos: Coords,
+}
+
+fn setup_gtk_app(app: &Application) {
+    let glade_ui = include_str!("oxiboard.glade");
+
+    let builder = Builder::new();
+    builder
+        .add_from_string(glade_ui)
+        .expect("Failed to load the user interface");
+
+    let main_window = builder
+        .get_object::<ApplicationWindow>("main_window")
+        .expect("Failed to locate `main_window`");
+    main_window.set_title("Oxiboard");
+
+    let canvas = builder
+        .get_object::<DrawingArea>("canvas")
+        .expect("Failed to locate `canvas`");
+
+    let event_mask = EventMask::POINTER_MOTION_MASK
+        | EventMask::BUTTON_PRESS_MASK
+        | EventMask::BUTTON_RELEASE_MASK;
+    canvas.add_events(event_mask);
+
+    main_window.show_all();
+    app.add_window(&main_window);
+
+    let oxiboard = Rc::new(
+        RefCell::new(
+            Oxiboard {
+                canvas,
+                lines: Vec::new(),
+                current_line: None,
+                last_pos: (0.0, 0.0),
+            }
+        )
+    );
+
+    let oxiboard_clone = Rc::clone(&oxiboard);
+    oxiboard
+        .borrow()
+        .canvas
+        .connect_button_press_event(move |canvas, button| {
+            oxiboard_clone.borrow_mut().handle_button_press_event(canvas, button);
+            Inhibit(false)
+        });
+
+    let oxiboard_clone = Rc::clone(&oxiboard);
+    oxiboard
+        .borrow()
+        .canvas
+        .connect_button_release_event(move |canvas, button| {
+            oxiboard_clone.borrow_mut().handle_button_release_event(canvas, button);
+            Inhibit(false)
+        });
+
+    let oxiboard_clone = Rc::clone(&oxiboard);
+    oxiboard
+        .borrow()
+        .canvas
+        .connect_motion_notify_event(move |canvas, motion| {
+            oxiboard_clone.borrow_mut().handle_motion_notify_event(canvas, motion);
+            Inhibit(false)
+        });
+
+    let oxiboard_clone = Rc::clone(&oxiboard);
+    oxiboard
+        .borrow()
+        .canvas
+        .connect_draw(move |canvas, ctx| {
+            oxiboard_clone.borrow_mut().handle_draw_event(canvas, ctx);
+            Inhibit(false)
+        });
+}
+
+pub fn run() -> Result<(), Box<dyn Error>> {
+    let gtk_app = Application::new(None, Default::default()).unwrap();
+    gtk_app.connect_activate(setup_gtk_app);
+
+    let return_code = gtk_app.run(&[]);
+    match return_code {
+        0 => Ok(()),
+        x => Err(Box::new(GtkAppError(x))),
+    }
 }
 
 impl Oxiboard {
-    pub fn new() -> Result<Oxiboard, Box<dyn Error>> {
-        let app = Application::new(Some("com.github.kodo-pp.oxiboard"), Default::default())?;
-
-        let surface = ImageSurface::create(Format::ARgb32, 400, 400)?;
-        let ctx = Cairo::new(&surface);
-        ctx.set_source_rgb(1.0, 0.0, 0.0);
-        ctx.move_to(0.0, 0.0);
-        ctx.line_to(200.0, 400.0);
-        ctx.line_to(400.0, 200.0);
-        ctx.close_path();
-        ctx.fill();
-
-        app.connect_activate(move |app| {
-            let main_window = ApplicationWindow::new(app);
-            main_window.set_title("Oxiboard");
-            main_window.set_default_size(800, 600);
-
-            let canvas = DrawingArea::new();
-            let surface = surface.clone();
-            canvas.connect_draw(move |canvas, ctx| {
-                println!("draw");
-                let alloc = canvas.get_allocation();
-                let w = alloc.width as f64;
-                let h = alloc.height as f64;
-                ctx.move_to(0.0, 0.0);
-                ctx.line_to(w / 2.0, h / 2.0);
-                ctx.line_to(w, 0.0);
-                ctx.fill();
-                ctx.set_source_surface(&surface, w / 2.0 - 200.0, h / 2.0 - 200.0);
-                ctx.rectangle(w / 2.0 - 200.0, h / 2.0 - 200.0, 400.0, 400.0);
-                ctx.fill();
-                Inhibit(false)
-            });
-            canvas.connect_motion_notify_event(|_canvas, event| {
-                dbg!(event.get_coords());
-                Inhibit(false)
-            });
-            canvas.add_events(
-                EventMask::POINTER_MOTION_MASK
-                    | EventMask::BUTTON_MOTION_MASK
-                    | EventMask::BUTTON1_MOTION_MASK
-            );
-            main_window.add(&canvas);
-            main_window.show_all();
-        });
-
-        Ok(
-            Oxiboard {
-                gtk_app: app,
-            }
-        )
+    fn handle_button_press_event(&mut self, canvas: &DrawingArea, button: &gdk::EventButton) {
+        if let Some(coords) = button.get_coords() {
+            self.current_line = Some((coords, coords));
+        }
+        canvas.queue_draw();
     }
 
-    pub fn run(self) -> Result<(), Box<dyn Error>> {
-        let exit_code = self.gtk_app.run(&[]);
-        if exit_code == 0 {
-            Ok(())
-        } else {
-            Err(GtkAppReturnCodeError(exit_code).into())
+    fn handle_button_release_event(&mut self, canvas: &DrawingArea, _button: &gdk::EventButton) {
+        match self.current_line {
+            Some(line) => self.lines.push(line),
+            None => (),
+        }
+        self.current_line = None;
+        canvas.queue_draw();
+    }
+
+    fn handle_motion_notify_event(&mut self, canvas: &DrawingArea, motion: &gdk::EventMotion) {
+        if let Some(ref mut line) = self.current_line {
+            if let Some(coords) = motion.get_coords() {
+                line.1 = coords;
+                canvas.queue_draw();
+            }
         }
     }
+
+    fn handle_draw_event(&self, _canvas: &DrawingArea, ctx: &Cairo) {
+        ctx.set_line_width(5.0);
+        ctx.set_source_rgb(0.0, 0.0, 1.0);
+        ctx.set_line_cap(cairo::LineCap::Round);
+        for line in self.lines.iter().copied().chain(self.current_line) {
+            draw_line(ctx, line);
+        }
+    }
+}
+
+fn draw_line(ctx: &Cairo, ((x0, y0), (x1, y1)): Line) {
+    ctx.move_to(x0, y0);
+    ctx.line_to(x1, y1);
+    ctx.stroke();
 }
