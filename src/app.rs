@@ -18,7 +18,7 @@ type Line = (Coords, Coords);
 pub struct Oxiboard {
     canvas: DrawingArea,
     lines: Vec<Line>,
-    current_line: Option<Line>,
+    last_pos: Option<Coords>,
 }
 
 fn setup_gtk_app(app: &Application) {
@@ -51,7 +51,7 @@ fn setup_gtk_app(app: &Application) {
             Oxiboard {
                 canvas,
                 lines: Vec::new(),
-                current_line: None,
+                last_pos: None,
             }
         )
     );
@@ -107,34 +107,32 @@ pub fn run() -> Result<(), Box<dyn Error>> {
 impl Oxiboard {
     fn handle_button_press_event(&mut self, canvas: &DrawingArea, button: &gdk::EventButton) {
         if let Some(coords) = button.get_coords() {
-            self.current_line = Some((coords, coords));
+            self.lines.push((coords, coords));
+            self.last_pos = Some(coords);
         }
         canvas.queue_draw();
     }
 
-    fn handle_button_release_event(&mut self, canvas: &DrawingArea, _button: &gdk::EventButton) {
-        match self.current_line {
-            Some(line) => self.lines.push(line),
-            None => (),
-        }
-        self.current_line = None;
-        canvas.queue_draw();
+    fn handle_button_release_event(&mut self, _canvas: &DrawingArea, _button: &gdk::EventButton) {
+        self.last_pos = None;
     }
 
     fn handle_motion_notify_event(&mut self, canvas: &DrawingArea, motion: &gdk::EventMotion) {
-        if let Some(ref mut line) = self.current_line {
-            if let Some(coords) = motion.get_coords() {
-                line.1 = coords;
-                canvas.queue_draw();
-            }
+        match (self.last_pos, motion.get_coords()) {
+            (Some(old_pos), Some(new_pos)) => {
+                self.lines.push((old_pos, new_pos));
+                self.last_pos = Some(new_pos);
+            },
+            _ => (),
         }
+        canvas.queue_draw()
     }
 
     fn handle_draw_event(&self, _canvas: &DrawingArea, ctx: &Cairo) {
         ctx.set_line_width(5.0);
         ctx.set_source_rgb(0.0, 0.0, 1.0);
         ctx.set_line_cap(cairo::LineCap::Round);
-        for line in self.lines.iter().copied().chain(self.current_line) {
+        for line in self.lines.iter().copied() {
             draw_line(ctx, line);
         }
     }
