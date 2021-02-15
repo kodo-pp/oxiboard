@@ -23,3 +23,9 @@ version = "0.13"
 
 [dependencies.thiserror]
 version = "1.0"
+
+[dependencies.take_mut]
+version = "0.2"
+
+[dependencies.enum-as-inner]
+version = "0.3"

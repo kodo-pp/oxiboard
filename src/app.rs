@@ -7,18 +7,16 @@ use std::error::Error;
 use std::rc::Rc;
 use std::cell::RefCell;
 use thiserror::Error;
+use crate::board::Board;
+use crate::draw::Draw;
 
 #[derive(Debug, Error)]
 #[error("GTK Application returned an error code {0}")]
 pub struct GtkAppError(i32);
 
-type Coords = (f64, f64);
-type Line = (Coords, Coords);
-
 pub struct Oxiboard {
     canvas: DrawingArea,
-    lines: Vec<Line>,
-    last_pos: Option<Coords>,
+    board: Board,
 }
 
 fn setup_gtk_app(app: &Application) {
@@ -50,8 +48,7 @@ fn setup_gtk_app(app: &Application) {
         RefCell::new(
             Oxiboard {
                 canvas,
-                lines: Vec::new(),
-                last_pos: None,
+                board: Board::new(),
             }
         )
     );
@@ -107,21 +104,19 @@ pub fn run() -> Result<(), Box<dyn Error>> {
 impl Oxiboard {
     fn handle_button_press_event(&mut self, canvas: &DrawingArea, button: &gdk::EventButton) {
         if let Some(coords) = button.get_coords() {
-            self.lines.push((coords, coords));
-            self.last_pos = Some(coords);
+            self.board.begin_drawing(coords);
         }
         canvas.queue_draw();
     }
 
     fn handle_button_release_event(&mut self, _canvas: &DrawingArea, _button: &gdk::EventButton) {
-        self.last_pos = None;
+        self.board.finish();
     }
 
     fn handle_motion_notify_event(&mut self, canvas: &DrawingArea, motion: &gdk::EventMotion) {
-        match (self.last_pos, motion.get_coords()) {
-            (Some(old_pos), Some(new_pos)) => {
-                self.lines.push((old_pos, new_pos));
-                self.last_pos = Some(new_pos);
+        match (self.board.is_active(), motion.get_coords()) {
+            (true, Some(coords)) => {
+                self.board.add_point(coords);
             },
             _ => (),
         }
@@ -132,14 +127,6 @@ impl Oxiboard {
         ctx.set_line_width(5.0);
         ctx.set_source_rgb(0.0, 0.0, 1.0);
         ctx.set_line_cap(cairo::LineCap::Round);
-        for line in self.lines.iter().copied() {
-            draw_line(ctx, line);
-        }
+        self.board.draw(ctx);
     }
-}
-
-fn draw_line(ctx: &Cairo, ((x0, y0), (x1, y1)): Line) {
-    ctx.move_to(x0, y0);
-    ctx.line_to(x1, y1);
-    ctx.stroke();
 }
