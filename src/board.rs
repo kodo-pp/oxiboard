@@ -90,12 +90,6 @@ pub struct Glyph {
     points: Vec<Point>,
 }
 
-impl Glyph {
-    pub fn last_point(&self) -> Point {
-        *self.points.last().unwrap()
-    }
-}
-
 #[derive(Debug, EnumAsInner)]
 pub enum Board {
     Static(StaticBoard),
@@ -155,6 +149,7 @@ impl Board {
         }
     }
 
+    #[allow(dead_code)]
     pub fn current_glyph(&self) -> Result<&Glyph, WrongBoardStateError> {
         match self {
             Self::Active(board) => Ok(board.current_glyph()),
