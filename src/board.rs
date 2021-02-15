@@ -1,5 +1,6 @@
 use crate::draw::{Cairo, Draw};
 use enum_as_inner::EnumAsInner;
+use euclid::default::{Point2D, Vector2D};
 
 #[derive(Debug)]
 pub struct WrongBoardStateError {
@@ -164,21 +165,81 @@ impl Draw for Glyph {
     fn draw(&self, ctx: &Cairo) {
         ctx.set_source_rgb(0.0, 0.0, 1.0);
         ctx.set_line_cap(cairo::LineCap::Round);
+
         let (x0, y0) = self.points[0];
         ctx.move_to(x0, y0);
-        if self.points.len() == 1 {
+
+        let num_points = self.points.len();
+
+        if num_points == 1 {
             ctx.line_to(x0, y0);
             ctx.stroke();
             return;
         }
-
-        for point_pair in self.points.windows(2) {
-            let (x1, y1) = point_pair[0];
-            let (x2, y2) = point_pair[1];
-            ctx.move_to(x1, y1);
-            ctx.line_to(x2, y2);
+        
+        if num_points == 2 {
+            let (x1, y1) = self.points[1];
+            ctx.line_to(x1, y1);
             ctx.stroke();
+            return;
         }
+
+        const RATIO: f64 = 1.0 / 3.0;
+
+        {
+            let origin = Point2D::from(self.points[0]);
+            let destination = Point2D::from(self.points[1]);
+            let next = Point2D::from(self.points[2]);
+
+            let parallel_direction_next = (next - origin)
+                .try_normalize()
+                .unwrap_or_else(|| Vector2D::zero());
+            let delta = destination - origin;
+            let handle1 = origin + delta * RATIO;
+            let handle2 = destination - parallel_direction_next * delta.length() * RATIO;
+
+            ctx.move_to(origin.x, origin.y);
+            ctx.curve_to(handle1.x, handle1.y, handle2.x, handle2.y, destination.x, destination.y);
+        }
+
+        for window in self.points.windows(4) {
+            let prev = Point2D::from(window[0]);
+            let origin = Point2D::from(window[1]);
+            let destination = Point2D::from(window[2]);
+            let next = Point2D::from(window[3]);
+
+            let parallel_direction_prev = (destination - prev)
+                .try_normalize()
+                .unwrap_or_else(|| Vector2D::zero());
+            let parallel_direction_next = (next - origin)
+                .try_normalize()
+                .unwrap_or_else(|| Vector2D::zero());
+            let delta = destination - origin;
+            let delta_len = delta.length();
+            let handle1 = origin + parallel_direction_prev * delta_len * RATIO;
+            let handle2 = destination - parallel_direction_next * delta_len * RATIO;
+
+            ctx.move_to(origin.x, origin.y);
+            ctx.curve_to(handle1.x, handle1.y, handle2.x, handle2.y, destination.x, destination.y);
+        }
+
+        {
+            let prev = Point2D::from(self.points[num_points - 3]);
+            let origin = Point2D::from(self.points[num_points - 2]);
+            let destination = Point2D::from(self.points[num_points - 1]);
+
+            let parallel_direction_prev = (destination - prev)
+                .try_normalize()
+                .unwrap_or_else(|| Vector2D::zero());
+            let delta = destination - origin;
+            let handle1 = origin + parallel_direction_prev * delta.length() * RATIO;
+            let handle2 = destination - delta * RATIO;
+
+            ctx.move_to(origin.x, origin.y);
+            ctx.curve_to(handle1.x, handle1.y, handle2.x, handle2.y, destination.x, destination.y);
+        }
+
+        ctx.stroke();
     }
 }
 
