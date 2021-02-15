@@ -1,6 +1,45 @@
 use crate::draw::{Cairo, Draw};
 use enum_as_inner::EnumAsInner;
 
+#[derive(Debug)]
+pub struct WrongBoardStateError {
+    is_active: bool,
+    description: Option<String>,
+}
+
+impl WrongBoardStateError {
+    pub fn expected_static(description: Option<impl Into<String>>) -> Self { 
+        Self {
+            is_active: true,
+            description: description.map(Into::into),
+        }
+    }
+
+    pub fn expected_active(description: Option<impl Into<String>>) -> Self {
+        Self {
+            is_active: false,
+            description: description.map(Into::into),
+        }
+    }
+}
+
+impl std::fmt::Display for WrongBoardStateError {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if self.is_active {
+            write!(fmt, "A glyph is already being drawn")?;
+        } else {
+            write!(fmt, "No glyph is currently being drawn")?;
+        }
+
+        if let Some(desc) = &self.description {
+            write!(fmt, ", so {}", desc)?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for WrongBoardStateError {}
+
 pub type Point = (f64, f64);
 
 #[derive(Debug)]
@@ -35,6 +74,10 @@ impl ActiveBoard {
         self.current_glyph.points.push(point);
     }
 
+    pub fn current_glyph(&self) -> &Glyph {
+        &self.current_glyph
+    }
+
     pub fn finish(self) -> StaticBoard {
         let mut board = self.board;
         board.glyphs.push(self.current_glyph);
@@ -45,6 +88,12 @@ impl ActiveBoard {
 #[derive(Debug)]
 pub struct Glyph {
     points: Vec<Point>,
+}
+
+impl Glyph {
+    pub fn last_point(&self) -> Point {
+        *self.points.last().unwrap()
+    }
 }
 
 #[derive(Debug, EnumAsInner)]
@@ -58,39 +107,60 @@ impl Board {
         Self::Static(StaticBoard::new())
     }
 
-    pub fn begin_drawing(&mut self, initial_point: Point) {
+    pub fn begin_drawing(&mut self, initial_point: Point) -> Result<(), WrongBoardStateError> {
         match self {
             Self::Static(_) => (),
-            _ => panic!("Attempted to start drawing a glyph while another one is not finished"),
+            _ => {
+                return Err(WrongBoardStateError::expected_static(Some(
+                    "cannot start drawing another glyph",
+                )))
+            }
         }
 
         take_mut::take(self, |board| {
             Self::Active(board.into_static().unwrap().begin_drawing(initial_point))
         });
+
+        Ok(())
     }
 
-    pub fn add_point(&mut self, point: Point) {
+    pub fn add_point(&mut self, point: Point) -> Result<(), WrongBoardStateError> {
         match self {
-            Self::Active(board) => board.add_point(point),
-            Self::Static(_) => panic!("Attempted to add a point to a static board"),
+            Self::Active(board) => Ok(board.add_point(point)),
+            Self::Static(_) => Err(WrongBoardStateError::expected_active(Some(
+                "cannot add a point to the current glyph"
+            )))
         }
     }
 
-    pub fn finish(&mut self) {
+    pub fn finish(&mut self) -> Result<(), WrongBoardStateError> {
         match self {
             Self::Active(_) => (),
-            _ => panic!("Attempted to finish drawing a glyph although no glyphs are being drawn"),
+            _ => return Err(WrongBoardStateError::expected_active(Some(
+                "cannot finish drawing the current glyph"
+            ))),
         }
 
         take_mut::take(self, |board| {
             Self::Static(board.into_active().unwrap().finish())
         });
+
+        Ok(())
     }
 
     pub fn is_active(&self) -> bool {
         match self {
             Self::Active(_) => true,
             _ => false,
+        }
+    }
+
+    pub fn current_glyph(&self) -> Result<&Glyph, WrongBoardStateError> {
+        match self {
+            Self::Active(board) => Ok(board.current_glyph()),
+            _ => Err(WrongBoardStateError::expected_active(Some(
+                "there is no current glyph",
+            ))),
         }
     }
 }

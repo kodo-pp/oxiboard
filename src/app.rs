@@ -103,19 +103,19 @@ pub fn run() -> Result<(), Box<dyn Error>> {
 impl Oxiboard {
     fn handle_button_press_event(&mut self, canvas: &DrawingArea, button: &gdk::EventButton) {
         if let Some(coords) = button.get_coords() {
-            self.board.begin_drawing(coords);
+            self.board.begin_drawing(coords).unwrap();
         }
         canvas.queue_draw();
     }
 
     fn handle_button_release_event(&mut self, _canvas: &DrawingArea, _button: &gdk::EventButton) {
-        self.board.finish();
+        self.board.finish().unwrap();
     }
 
     fn handle_motion_notify_event(&mut self, canvas: &DrawingArea, motion: &gdk::EventMotion) {
         match (self.board.is_active(), motion.get_coords()) {
             (true, Some(coords)) => {
-                self.board.add_point(coords);
+                self.board.add_point(coords).unwrap();
             }
             _ => (),
         }
