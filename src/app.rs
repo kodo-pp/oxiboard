@@ -1,14 +1,14 @@
+use crate::board::Board;
+use crate::draw::Draw;
 use cairo::Context as Cairo;
 use gdk::EventMask;
 use gio::prelude::*;
 use gtk::prelude::*;
 use gtk::{Application, ApplicationWindow, Builder, DrawingArea};
+use std::cell::RefCell;
 use std::error::Error;
 use std::rc::Rc;
-use std::cell::RefCell;
 use thiserror::Error;
-use crate::board::Board;
-use crate::draw::Draw;
 
 #[derive(Debug, Error)]
 #[error("GTK Application returned an error code {0}")]
@@ -44,21 +44,19 @@ fn setup_gtk_app(app: &Application) {
     main_window.show_all();
     app.add_window(&main_window);
 
-    let oxiboard = Rc::new(
-        RefCell::new(
-            Oxiboard {
-                canvas,
-                board: Board::new(),
-            }
-        )
-    );
+    let oxiboard = Rc::new(RefCell::new(Oxiboard {
+        canvas,
+        board: Board::new(),
+    }));
 
     let oxiboard_clone = Rc::clone(&oxiboard);
     oxiboard
         .borrow()
         .canvas
         .connect_button_press_event(move |canvas, button| {
-            oxiboard_clone.borrow_mut().handle_button_press_event(canvas, button);
+            oxiboard_clone
+                .borrow_mut()
+                .handle_button_press_event(canvas, button);
             Inhibit(false)
         });
 
@@ -67,7 +65,9 @@ fn setup_gtk_app(app: &Application) {
         .borrow()
         .canvas
         .connect_button_release_event(move |canvas, button| {
-            oxiboard_clone.borrow_mut().handle_button_release_event(canvas, button);
+            oxiboard_clone
+                .borrow_mut()
+                .handle_button_release_event(canvas, button);
             Inhibit(false)
         });
 
@@ -76,18 +76,17 @@ fn setup_gtk_app(app: &Application) {
         .borrow()
         .canvas
         .connect_motion_notify_event(move |canvas, motion| {
-            oxiboard_clone.borrow_mut().handle_motion_notify_event(canvas, motion);
+            oxiboard_clone
+                .borrow_mut()
+                .handle_motion_notify_event(canvas, motion);
             Inhibit(false)
         });
 
     let oxiboard_clone = Rc::clone(&oxiboard);
-    oxiboard
-        .borrow()
-        .canvas
-        .connect_draw(move |canvas, ctx| {
-            oxiboard_clone.borrow_mut().handle_draw_event(canvas, ctx);
-            Inhibit(false)
-        });
+    oxiboard.borrow().canvas.connect_draw(move |canvas, ctx| {
+        oxiboard_clone.borrow_mut().handle_draw_event(canvas, ctx);
+        Inhibit(false)
+    });
 }
 
 pub fn run() -> Result<(), Box<dyn Error>> {
@@ -117,7 +116,7 @@ impl Oxiboard {
         match (self.board.is_active(), motion.get_coords()) {
             (true, Some(coords)) => {
                 self.board.add_point(coords);
-            },
+            }
             _ => (),
         }
         canvas.queue_draw()

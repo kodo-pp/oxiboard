@@ -1,5 +1,5 @@
+use crate::draw::{Cairo, Draw};
 use enum_as_inner::EnumAsInner;
-use crate::draw::{Draw, Cairo};
 
 pub type Point = (f64, f64);
 
@@ -20,8 +20,13 @@ impl StaticBoard {
     }
 
     pub fn begin_drawing(self, initial_point: Point) -> ActiveBoard {
-        let current_glyph = Glyph { points: vec![initial_point] };
-        ActiveBoard { board: self, current_glyph }
+        let current_glyph = Glyph {
+            points: vec![initial_point],
+        };
+        ActiveBoard {
+            board: self,
+            current_glyph,
+        }
     }
 }
 
@@ -54,7 +59,7 @@ impl Board {
     }
 
     pub fn begin_drawing(&mut self, initial_point: Point) {
-        match self { 
+        match self {
             Self::Static(_) => (),
             _ => panic!("Attempted to start drawing a glyph while another one is not finished"),
         }
@@ -72,7 +77,7 @@ impl Board {
     }
 
     pub fn finish(&mut self) {
-        match self { 
+        match self {
             Self::Active(_) => (),
             _ => panic!("Attempted to finish drawing a glyph although no glyphs are being drawn"),
         }
